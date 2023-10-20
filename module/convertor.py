@@ -41,25 +41,27 @@ class AmplitudeEstimator(nn.Module):
 
 
 class ContentEncoder(nn.Module):
-    def __init__(self, n_fft=1024, num_layers=4):
+    def __init__(self, n_fft=1024, num_layers=4, content_dim=4):
         super().__init__()
         input_channels = n_fft // 2 + 1
         self.input_layer = nn.Conv1d(input_channels, 512, 1)
         self.mid_layers = nn.Sequential(*[ConvNeXt1d() for _ in range(num_layers)])
+        self.output_layer = nn.Conv1d(512, content_dim, 1)
 
     def forward(self, x):
         x = self.input_layer(x)
         x = self.mid_layers(x)
-        mu = x.mean(dim=1, keepdim=True)
+        x = self.output_layer(x)
         sigma = x.std(dim=1, keepdim=True) + 1e-4
-        x = (x - mu) / sigma
+        x = x / sigma
         return x
 
 
 class PhonemeQuantizer(nn.Module):
-    def __init__(self, channels=512, num_phonemes=32):
+    def __init__(self, channels=4, num_phonemes=32):
         super().__init__()
         self.codebook = nn.Embedding(num_phonemes, channels)
+        self.codebook.weight.data.uniform_(-1/channels, 1/channels)
 
     def forward(self, x):
         x = x.transpose(1, 2)
@@ -69,8 +71,8 @@ class PhonemeQuantizer(nn.Module):
         y = y.expand(N, y.shape[1], y.shape[2]).transpose(1, 2)
         x = x / (x.std(dim=1, keepdim=True) + 1e-4)
         y = y / (y.std(dim=1, keepdim=True) + 1e-4)
-        dists = torch.bmm(x, y)
-        indices = torch.argmax(dists, dim=2)
+        sims = torch.bmm(x, y)
+        indices = torch.argmax(sims, dim=2)
         quantized = self.codebook(indices)
         loss = ((x - quantized.detach()) ** 2).mean() + ((x.detach() - quantized) ** 2).mean()
         return quantized.transpose(1, 2), loss
@@ -116,7 +118,7 @@ class F0Encoder(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, n_fft=1024, hop_length=256, content_dim=512, condition_dim=256, num_layers=8):
+    def __init__(self, n_fft=1024, hop_length=256, content_dim=4, condition_dim=256, num_layers=8):
         super().__init__()
         self.n_fft = n_fft
         self.hop_length = hop_length
@@ -183,7 +185,7 @@ class VoiceConvertor(nn.Module):
         spk, _ = self.speaker_encoder(spec)
         return spk
 
-    def convert(self, x, spk, pitch_shift=0, alpha=0.0):
+    def convert(self, x, spk, pitch_shift=0, alpha=1.0):
         x = spectrogram(x)
         con = self.content_encoder(x)
         amp = self.amp_estimator.estimate(x)
