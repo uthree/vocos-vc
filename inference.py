@@ -47,6 +47,8 @@ if args.target != "NONE":
     wf = wf / wf.abs().max()
     wf = wf[:1]
     spk = model.encode_spekaer(wf)
+else:
+    spk = torch.zeros(1, 256, 1).to(device)
 
 paths = glob.glob(os.path.join(args.inputs, "*"))
 for i, path in enumerate(paths):

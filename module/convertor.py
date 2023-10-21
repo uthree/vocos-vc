@@ -57,31 +57,6 @@ class ContentEncoder(nn.Module):
         return x
 
 
-class PhonemeQuantizer(nn.Module):
-    def __init__(self, channels=4, num_phonemes=32):
-        super().__init__()
-        self.codebook = nn.Embedding(num_phonemes, channels)
-        self.codebook.weight.data.uniform_(-1/channels, 1/channels)
-
-    def forward(self, x):
-        x = x.transpose(1, 2)
-        N = x.shape[0]
-        y = self.codebook.weight
-        y = y.unsqueeze(0)
-        y = y.expand(N, y.shape[1], y.shape[2]).transpose(1, 2)
-        x = x / (x.std(dim=1, keepdim=True) + 1e-4)
-        y = y / (y.std(dim=1, keepdim=True) + 1e-4)
-        sims = torch.bmm(x, y)
-        indices = torch.argmax(sims, dim=2)
-        quantized = self.codebook(indices)
-        loss = ((x - quantized.detach()) ** 2).mean() + ((x.detach() - quantized) ** 2).mean()
-        return quantized.transpose(1, 2), loss
-
-    def quantize(self, x, alpha=0):
-        q, l = self.forward(x)
-        return q * (1 - alpha) + x * alpha
-
-
 class SpeakerEncoder(nn.Module):
     def __init__(self, n_fft=1024, embedding_dim=256, num_layers=4):
         super().__init__()
@@ -164,7 +139,7 @@ class Generator(nn.Module):
 class ConstantSpeaker(nn.Module):
     def __init__(self, speaker_dim=256):
         super().__init__()
-        self.spk = nn.Parameter(torch.randn(1, speaker_dim, 1))
+        self.spk = nn.Parameter(torch.zeros(1, speaker_dim, 1))
 
     def forward(self):
         return self.spk
@@ -178,7 +153,6 @@ class VoiceConvertor(nn.Module):
         self.generator = Generator()
         self.content_encoder = ContentEncoder()
         self.speaker_encoder = SpeakerEncoder()
-        self.quantizer = PhonemeQuantizer()
     
     def encode_spekaer(self, wave):
         spec = spectrogram(wave)
@@ -197,6 +171,5 @@ class VoiceConvertor(nn.Module):
         f0 = 440 * 2 ** ((pitch + 9) / 12) # Convert pitch to f0
         f0[torch.logical_or(f0.isnan(), f0.isinf())] = 0
         
-        con = self.quantizer.quantize(con, alpha)
         out_wave = self.generator.forward(con, f0, amp, spk)
         return out_wave

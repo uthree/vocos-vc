@@ -14,6 +14,7 @@ from module.dataset import WaveFileDirectory
 from module.spectrogram import spectrogram
 from module.convertor import VoiceConvertor
 from module.discriminator import Discriminator
+from module.common import compute_f0
 
 parser = argparse.ArgumentParser(description="train model")
 
@@ -31,9 +32,9 @@ parser.add_argument('-gacc', '--gradient-accumulation', default=1, type=int)
 parser.add_argument('--feature-matching', default=2, type=float)
 parser.add_argument('--mel', default=45, type=float)
 parser.add_argument('--content', default=10, type=float)
-parser.add_argument('--kl', default=0.2, type=float)
-parser.add_argument('--vq', default=10, type=float)
+parser.add_argument('--kl', default=1, type=float)
 parser.add_argument('-wpe', '--world-pitch-estimation', default=False, type=bool)
+parser.add_argument('-ft', '--finetune', default=False, type=bool)
 
 args = parser.parse_args()
 
@@ -73,7 +74,6 @@ def cut_center_wav(x):
     size = length // 4
     return x[:, center-size:center+size]
 
-
 device = torch.device(args.device)
 con, D = load_or_init_models(device)
 Ec = con.content_encoder
@@ -81,7 +81,10 @@ F0E = con.f0_estimator
 AE = con.amp_estimator
 G = con.generator
 Es = con.speaker_encoder
-Q = con.quantizer
+
+if args.finetune:
+    inference_mode(Ec)
+    inference_mode(Q)
 
 ds = WaveFileDirectory(
         [args.dataset],
@@ -126,10 +129,11 @@ for epoch in range(args.epoch):
             content = Ec(spec)
             mean, logvar = Es(spec)
             spk_src = mean + torch.exp(logvar) * torch.randn_like(logvar)
+            if args.finetune:
+                spk_src = spk_src * 0
             spk_tgt = spk_src.roll(1, dims=0)
             f0_tgt = f0 * (torch.rand(N, 1, 1, device=device) * 1.5 + 0.5)
             amp = AE(spec)
-            _, loss_vq = Q(content)
             wave_recon = G(content, f0, amp, spk_src)
             wave_fake = G(content, f0_tgt, amp, spk_tgt)
             loss_mel = (log_mel(wave) - log_mel(wave_recon)).abs().mean()
@@ -142,7 +146,8 @@ for epoch in range(args.epoch):
             logits = D.logits(cut_center_wav(wave_fake))
             for logit in logits:
                 loss_adv += (logit ** 2).mean()
-            loss_g = loss_adv + loss_mel * args.mel + loss_kl * args.kl + args.content * loss_con + loss_feat * args.feature_matching + loss_vq * args.vq
+            loss_g = loss_adv + loss_mel * args.mel + loss_kl * args.kl + args.content * loss_con + loss_feat * args.feature_matching
+
         scaler.scale(loss_g).backward()
         scaler.step(OptG)
 
@@ -166,7 +171,7 @@ for epoch in range(args.epoch):
 
         step_count += 1
         
-        tqdm.write(f"Step {step_count}, D: {loss_d.item():.4f}, Adv.: {loss_adv.item():.4f}, Mel.: {loss_mel.item():.4f}, Feat.: {loss_feat.item():.4f}, Con.: {loss_con.item():.4f}, K.L.: {loss_kl.item():.4f}, V.Q.: {loss_vq.item():.4f}")
+        tqdm.write(f"Step {step_count}, D: {loss_d.item():.4f}, Adv.: {loss_adv.item():.4f}, Mel.: {loss_mel.item():.4f}, Feat.: {loss_feat.item():.4f}, Con.: {loss_con.item():.4f}, K.L.: {loss_kl.item():.4f}")
         bar.update(N)
 
         if batch % 300 == 0:
