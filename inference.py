@@ -25,7 +25,7 @@ parser.add_argument('-k', default=4, type=int)
 parser.add_argument('-c', '--chunk', default=65536, type=int)
 parser.add_argument('-lib', '--voice-library-path', default="NONE")
 parser.add_argument('-noise', '--noise-gain', default=1.0, type=float)
-parser.add_argument('--breath', default=False, type=bool)
+parser.add_argument('-s', '--seed', default=-1, type=int)
 parser.add_argument('-wpe', '--world-pitch-estimation', default=False)
 parser.add_argument('-norm', '--normalize', default=False, type=bool)
 
@@ -49,6 +49,10 @@ if args.target != "NONE":
     spk = model.encode_spekaer(wf)
 else:
     spk = torch.zeros(1, 256, 1).to(device)
+
+if args.seed != -1:
+    torch.manual_seed(args.seed)
+    spk = torch.randn(1, 256, 1).to(device)
 
 paths = glob.glob(os.path.join(args.inputs, "*"))
 for i, path in enumerate(paths):
