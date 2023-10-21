@@ -145,7 +145,7 @@ for epoch in range(args.epoch):
             if args.finetune:
                 logits = D.logits(cut_center_wav(wave_recon))
             else:
-                logits = D.logits(cut_center_wav(wave_fake))
+                logits = D.logits(cut_center_wav(wave_fake)) + D.logits(cut_center_wav(wave_recon))
             for logit in logits:
                 loss_adv += (logit ** 2).mean()
             loss_g = loss_adv + loss_mel * args.mel + loss_kl * args.kl + args.content * loss_con + loss_feat * args.feature_matching
@@ -156,8 +156,9 @@ for epoch in range(args.epoch):
         # Train D.
         OptD.zero_grad()
         wave_fake = wave_fake.detach()
+        wave_recon = wave_recon.detach()
         with torch.cuda.amp.autocast(enabled=args.fp16):
-            logits_fake = D.logits(wave_fake)
+            logits_fake = D.logits(cut_center_wav(wave_fake)) + D.logits(cut_center_wav(wave_recon))
             logits_real = D.logits(wave)
             loss_d = 0
             for logit in logits_real:
