@@ -84,6 +84,7 @@ Es = con.speaker_encoder
 
 if args.finetune:
     inference_mode(Ec)
+    inference_mode(Es)
 
 ds = WaveFileDirectory(
         [args.dataset],
