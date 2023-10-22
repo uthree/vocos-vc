@@ -143,10 +143,7 @@ for epoch in range(args.epoch):
             loss_feat = D.feat_loss(cut_center_wav(wave_recon), cut_center_wav(wave))
 
             loss_adv = 0
-            if args.finetune:
-                logits = D.logits(cut_center_wav(wave_recon))
-            else:
-                logits = D.logits(cut_center_wav(wave_fake)) + D.logits(cut_center_wav(wave_recon))
+            logits = D.logits(cut_center_wav(wave_fake)) + D.logits(cut_center_wav(wave_recon))
             for logit in logits:
                 loss_adv += (logit ** 2).mean()
             loss_g = loss_adv + loss_mel * args.mel + loss_kl * args.kl + args.content * loss_con + loss_feat * args.feature_matching
