@@ -45,7 +45,7 @@ if args.target != "NONE":
     wf = wf.to(device)
     wf = torchaudio.functional.resample(wf, sr, 22050)
     wf = wf / wf.abs().max()
-    wf = wf[:1]
+    wf = wf.mean(dim=0, keepdim=True)
     spk = model.encode_spekaer(wf)
 else:
     spk = torch.zeros(1, 256, 1).to(device)
