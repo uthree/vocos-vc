@@ -53,8 +53,7 @@ class ContentEncoder(nn.Module):
         x = self.mid_layers(x)
         x = self.output_layer(x)
         mu = x.mean(dim=2, keepdim=True)
-        sigma = x.std(dim=1, keepdim=True) + 1e-4
-        x = (x - mu) / sigma
+        x = x - mu
         return x
 
 

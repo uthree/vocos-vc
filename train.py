@@ -150,6 +150,7 @@ for epoch in range(args.epoch):
 
         scaler.scale(loss_g).backward()
         scaler.step(OptG)
+        SchedulerG.step()
 
         # Train D.
         OptD.zero_grad()
@@ -168,7 +169,6 @@ for epoch in range(args.epoch):
 
         scaler.update()
         SchedulerD.step()
-        SchedulerG.step()
 
         step_count += 1
         
